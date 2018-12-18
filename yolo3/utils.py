@@ -35,31 +35,43 @@ def rand(a=0, b=1):
 
 def get_random_data(annotation_line, input_shape, random=True, max_boxes=20, jitter=.3, hue=.1, sat=1.5, val=1.5, proc_img=True):
     '''random preprocessing for real-time data augmentation'''
+    # 得到一幅图像的标注信息
     line = annotation_line.split()
+    # 打开图片
     image = Image.open(line[0])
+    # 获取图片的原始尺寸
     iw, ih = image.size
+    # 要求的尺寸
     h, w = input_shape
+    # 参见map的用法，这里将浮点坐标信息转换为定点
     box = np.array([np.array(list(map(int,box.split(',')))) for box in line[1:]])
 
     if not random:
+        # 如果random等于False，就是说不随机处理处理数据
+        # 而是按照规则方法处理数据
         # resize image
+        # 以原始图像中长边为基准，这样短边缩放才有富余
         scale = min(w/iw, h/ih)
         nw = int(iw*scale)
         nh = int(ih*scale)
+        # 粘贴过去的时候，以左上点为准
         dx = (w-nw)//2
         dy = (h-nh)//2
         image_data=0
         if proc_img:
             image = image.resize((nw,nh), Image.BICUBIC)
+            # 短边的部分用黑色填充
             new_image = Image.new('RGB', (w,h), (128,128,128))
             new_image.paste(image, (dx, dy))
             image_data = np.array(new_image)/255.
 
         # correct boxes
+        # 一个box：4个坐标信息，1个class_id
         box_data = np.zeros((max_boxes,5))
         if len(box)>0:
             np.random.shuffle(box)
-            if len(box)>max_boxes: box = box[:max_boxes]
+            if len(box)>max_boxes: 
+                box = box[:max_boxes]
             box[:, [0,2]] = box[:, [0,2]]*scale + dx
             box[:, [1,3]] = box[:, [1,3]]*scale + dy
             box_data[:len(box)] = box

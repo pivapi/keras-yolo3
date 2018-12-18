@@ -231,13 +231,15 @@ def yolo_eval(yolo_outputs,
 
 def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
     '''Preprocess true boxes to training input format
+    功能：将true boxes的绝对坐标转换为对应于feature map的相对坐标
 
     Parameters
     ----------
-    true_boxes: array, shape=(m, T, 5)
+    true_boxes: array, shape=(m, T, 5) m是batch_size;T是bbox数量;
         Absolute x_min, y_min, x_max, y_max, class_id relative to input_shape.
     input_shape: array-like, hw, multiples of 32
-    anchors: array, shape=(N, 2), wh
+    anchors: array, shape=(N, 2), wh, N=9
+             10,13,  16,30,  33,23,  30,61,  62,45,  59,119,  116,90,  156,198,  373,326
     num_classes: integer
 
     Returns
@@ -246,23 +248,34 @@ def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
 
     '''
     assert (true_boxes[..., 4]<num_classes).all(), 'class id must be less than num_classes'
+    # 3个feature map
     num_layers = len(anchors)//3 # default setting
+    # 这个不懂，起什么作用？
     anchor_mask = [[6,7,8], [3,4,5], [0,1,2]] if num_layers==3 else [[3,4,5], [1,2,3]]
 
     true_boxes = np.array(true_boxes, dtype='float32')
     input_shape = np.array(input_shape, dtype='int32')
+    # x_min, y_min, x_max, y_max
+    # 下面这条语句是什么意思？知道了，这个计算每个bbox的中心点
     boxes_xy = (true_boxes[..., 0:2] + true_boxes[..., 2:4]) // 2
+    # 计算每个bbox的Width和Height
     boxes_wh = true_boxes[..., 2:4] - true_boxes[..., 0:2]
+    # 归一化[0, 1]
     true_boxes[..., 0:2] = boxes_xy/input_shape[::-1]
     true_boxes[..., 2:4] = boxes_wh/input_shape[::-1]
 
+    # batch_size大小
     m = true_boxes.shape[0]
+    # 下面这条语句乍看有点怪异,原来这是一个dict，冒号前面0，1，2是key
+    # (13, 13) (26, 26) (52, 52)
     grid_shapes = [input_shape//{0:32, 1:16, 2:8}[l] for l in range(num_layers)]
+    # 4维数组
     y_true = [np.zeros((m,grid_shapes[l][0],grid_shapes[l][1],len(anchor_mask[l]),5+num_classes),
         dtype='float32') for l in range(num_layers)]
-
     # Expand dim to apply broadcasting.
+    # (1, 9, 2)
     anchors = np.expand_dims(anchors, 0)
+    # 所有元素同时除以2？这个后面的代码就不懂了，需要边调试边分析。
     anchor_maxes = anchors / 2.
     anchor_mins = -anchor_maxes
     valid_mask = boxes_wh[..., 0]>0
@@ -270,7 +283,8 @@ def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
     for b in range(m):
         # Discard zero rows.
         wh = boxes_wh[b, valid_mask[b]]
-        if len(wh)==0: continue
+        if len(wh)==0: 
+            continue
         # Expand dim to apply broadcasting.
         wh = np.expand_dims(wh, -2)
         box_maxes = wh / 2.

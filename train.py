@@ -20,6 +20,7 @@ def _main():
     anchors_path = 'model_data/yolo_anchors.txt'
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
+    # 这个anchors是9个不同的scale和ratio
     anchors = get_anchors(anchors_path)
 
     input_shape = (416,416) # multiple of 32, hw
@@ -33,6 +34,7 @@ def _main():
             freeze_body=2, weights_path='model_data/yolo_weights.h5') # make sure you know what you freeze
 
     logging = TensorBoard(log_dir=log_dir)
+    # {epoch:03d}这种格式需要熟悉
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
         monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
@@ -44,19 +46,21 @@ def _main():
     np.random.seed(10101)
     np.random.shuffle(lines)
     np.random.seed(None)
+    # 从train数据集里面分0.1比例的数据做val
     num_val = int(len(lines)*val_split)
     num_train = len(lines) - num_val
 
     # Train with frozen layers first, to get a stable loss.
     # Adjust num epochs to your dataset. This step is enough to obtain a not bad model.
     if True:
+        # loss注意一下
         model.compile(optimizer=Adam(lr=1e-3), loss={
             # use custom yolo_loss Lambda layer.
             'yolo_loss': lambda y_true, y_pred: y_pred})
 
         batch_size = 32
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
-        model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
+        model.fit_generator(、(lines[:num_train], batch_size, input_shape, anchors, num_classes),
                 steps_per_epoch=max(1, num_train//batch_size),
                 validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
                 validation_steps=max(1, num_val//batch_size),
@@ -109,7 +113,7 @@ def create_model(input_shape, anchors, num_classes, load_pretrained=True, freeze
     image_input = Input(shape=(None, None, 3))
     h, w = input_shape
     num_anchors = len(anchors)
-
+    # y_true是什么，下面这条程序怎么分析？
     y_true = [Input(shape=(h//{0:32, 1:16, 2:8}[l], w//{0:32, 1:16, 2:8}[l], \
         num_anchors//3, num_classes+5)) for l in range(3)]
 
@@ -122,7 +126,8 @@ def create_model(input_shape, anchors, num_classes, load_pretrained=True, freeze
         if freeze_body in [1, 2]:
             # Freeze darknet53 body or freeze all but 3 output layers.
             num = (185, len(model_body.layers)-3)[freeze_body-1]
-            for i in range(num): model_body.layers[i].trainable = False
+            for i in range(num): 
+                model_body.layers[i].trainable = False
             print('Freeze the first {} layers of total {} layers.'.format(num, len(model_body.layers)))
 
     model_loss = Lambda(yolo_loss, output_shape=(1,), name='yolo_loss',
@@ -163,7 +168,9 @@ def create_tiny_model(input_shape, anchors, num_classes, load_pretrained=True, f
     return model
 
 def data_generator(annotation_lines, batch_size, input_shape, anchors, num_classes):
-    '''data generator for fit_generator'''
+    '''data generator for fit_generator
+       总的来说就是生成一个batch_size的数据
+    '''
     n = len(annotation_lines)
     i = 0
     while True:
@@ -172,13 +179,17 @@ def data_generator(annotation_lines, batch_size, input_shape, anchors, num_class
         for b in range(batch_size):
             if i==0:
                 np.random.shuffle(annotation_lines)
+            # 随机处理输入数据，包括图片和bbox
             image, box = get_random_data(annotation_lines[i], input_shape, random=True)
             image_data.append(image)
             box_data.append(box)
             i = (i+1) % n
         image_data = np.array(image_data)
         box_data = np.array(box_data)
+        # 这里还需要转换bbox的格式
+        # 因为YOLO3里面3个feature map，需要对应地转换，将绝对坐标（原图像）转换为相对坐标
         y_true = preprocess_true_boxes(box_data, input_shape, anchors, num_classes)
+        # 能够得到一个batch_size的训练数据，注意"*"号的使用
         yield [image_data, *y_true], np.zeros(batch_size)
 
 def data_generator_wrapper(annotation_lines, batch_size, input_shape, anchors, num_classes):
