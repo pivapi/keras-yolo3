@@ -97,3 +97,6 @@ If you want to use original pretrained weights for YOLOv3:
 6. The training strategy is for reference only. Adjust it according to your dataset and your goal. And add further strategy if needed.
 
 7. For speeding up the training process with frozen layers train_bottleneck.py can be used. It will compute the bottleneck features of the frozen model first and then only trains the last layers. This makes training on CPU possible in a reasonable time. See [this](https://blog.keras.io/building-powerful-image-classification-models-using-very-little-data.html) for more information on bottleneck features.
+
+## 自己的实验记录
+1. 尝试了各种各样的tensorflow-gpu-1.xx.0版本，要不报cuDNN版本不匹配，经cuDNN版本更新到提示的版本上，又出现了failed to run cuBLAS routine cublasSgemm_v2: CUBLAS_STATUS_EXECUTION_FAILED和InternalError (see above for traceback): Blas SGEMM launch failed的错误，折腾了很久也没法解决，只能用tensorflow CPU版本。
